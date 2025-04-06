@@ -5,7 +5,9 @@ from django.db import models
 class PizzaList(models.Model):
     title = models.CharField(max_length=255, verbose_name="Назва піцци")
     price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Ціна")
-    description = models.CharField(max_length=255, verbose_name="Опис", default="Опис відсутній")
+    description = models.CharField(
+        max_length=255, verbose_name="Опис", default="Опис відсутній"
+    )
     photo = models.ImageField(upload_to="pizzas/", null=True, blank=True)
 
     class Meta:
@@ -19,7 +21,9 @@ class PizzaList(models.Model):
 class DrinkList(models.Model):
     title = models.CharField(max_length=255, verbose_name="Напій")
     price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Ціна")
-    description = models.CharField(max_length=255, verbose_name="Опис", default="Опис відсутній")
+    description = models.CharField(
+        max_length=255, verbose_name="Опис", default="Опис відсутній"
+    )
     photo = models.ImageField(upload_to="drinks/", null=True, blank=True)
 
     class Meta:
@@ -33,7 +37,9 @@ class DrinkList(models.Model):
 class SauceList(models.Model):
     title = models.CharField(max_length=255, verbose_name="Соус")
     price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Ціна")
-    description = models.CharField(max_length=255, verbose_name="Опис", default="Опис відсутній")
+    description = models.CharField(
+        max_length=255, verbose_name="Опис", default="Опис відсутній"
+    )
     photo = models.ImageField(upload_to="sauces/", null=True, blank=True)
 
     class Meta:
@@ -51,7 +57,15 @@ class CartItem(models.Model):
         ("sauce", "Соус"),
     ]
 
-    category = models.CharField(max_length=10, choices=CATEGORY_CHOICES, verbose_name="Категорія")
+    cart = models.ForeignKey(
+        "bot.Cart",
+        on_delete=models.CASCADE,
+        related_name="cart_items",
+        verbose_name="Корзина",
+    )
+    category = models.CharField(
+        max_length=10, choices=CATEGORY_CHOICES, verbose_name="Категорія"
+    )
     item_id = models.PositiveIntegerField(verbose_name="ID товару")
     title = models.CharField(max_length=255, verbose_name="Назва")
     price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Ціна")
@@ -67,16 +81,42 @@ class CartItem(models.Model):
 
 class BotUser(models.Model):
     telegram_id = models.BigIntegerField(unique=True, null=True, blank=True)
-    address = models.CharField(max_length=255, verbose_name="Адреса", blank=True, null=True)
-    name = models.CharField(max_length=255, verbose_name="Iм'я")
-    phone_number = models.CharField(max_length=15, verbose_name="Номер телефону", blank=True, null=True)
+    first_name = models.CharField(
+        max_length=255, verbose_name="Ім'я", null=True, blank=True
+    )
+    last_name = models.CharField(
+        max_length=255, verbose_name="Прізвище", null=True, blank=True
+    )
+    username = models.CharField(
+        max_length=255, verbose_name="Юзернейм", null=True, blank=True
+    )
 
     class Meta:
         verbose_name = "Користувач"
         verbose_name_plural = "Користувачі"
 
     def __str__(self):
-        return self.name
+        return self.first_name
+
+
+class DeliveryData(models.Model):
+    user = models.ForeignKey(
+        BotUser,
+        on_delete=models.CASCADE,
+        related_name="delivery_data",
+        verbose_name="Користувач",
+    )
+    address = models.CharField(
+        max_length=255, verbose_name="Адреса", blank=True, null=True
+    )
+    name = models.CharField(max_length=255, verbose_name="Iм'я")
+    phone_number = models.CharField(
+        max_length=15, verbose_name="Номер телефону", blank=True, null=True
+    )
+
+    class Meta:
+        verbose_name = "Дані для доставки"
+        verbose_name_plural = "Дані для доставки"
 
 
 class Cart(models.Model):
@@ -85,10 +125,12 @@ class Cart(models.Model):
         on_delete=models.CASCADE,
         related_name="carts",
         verbose_name="Користувач",
-        null = True,  # Дозволяємо значення NULL
-        blank = True
+        null=True,  # Дозволяємо значення NULL
+        blank=True,
     )
-    items = models.ManyToManyField(CartItem, related_name="carts", verbose_name="Товари")
+    items = models.ManyToManyField(
+        CartItem, related_name="carts", verbose_name="Товари"
+    )
     total_sum = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Створено")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Оновлено")
@@ -117,18 +159,28 @@ class OrderHistory(models.Model):
         BotUser,
         on_delete=models.CASCADE,
         related_name="orders",
-        verbose_name="Користувач"
+        verbose_name="Користувач",
     )
     payment_method = models.CharField(
         max_length=20,
         choices=PAYMENT_METHODS,
         verbose_name="Спосіб оплати",
-        default="cash"
+        default="cash",
     )
-    items = models.ManyToManyField(CartItem, related_name="order_histories", verbose_name="Товари")
-    total_sum = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Загальна сума")
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="new", verbose_name="Статус")
+    items = models.ManyToManyField(
+        CartItem, related_name="order_histories", verbose_name="Товари"
+    )
+    total_sum = models.DecimalField(
+        max_digits=10, decimal_places=2, verbose_name="Загальна сума"
+    )
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default="new", verbose_name="Статус"
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата створення")
 
+    class Meta:
+        verbose_name = "Історія замовлень"
+        verbose_name_plural = "Історія замовлень"
+
     def __str__(self):
-        return f"Замовлення #{self.id} (Користувач: {self.user.name}, Сума: {self.total_sum} грн)"
+        return f"Замовлення #{self.id} (Користувач: {self.user.first_name}, Сума: {self.total_sum} грн)"
