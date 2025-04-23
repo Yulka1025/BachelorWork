@@ -21,6 +21,8 @@ from bot.models import (
     DeliveryData,
     Cart,
 )  # Імпортуй свої моделі!
+from bot.utils import send_new_order_notification
+from bot.bot_instance import *  # або з іншого файлу, де в тебе ініціалізується aiogram Bot
 
 router = Router()
 
@@ -147,6 +149,13 @@ async def get_payment(message: Message, state: FSMContext):
             }
         )
         await sync_to_async(order.items.set)(cart.items.all())
+        from bot.bot_instance import bot as tg_bot
+        await send_new_order_notification(
+            tg_bot,
+            order.id,
+            user.first_name if user and user.first_name else (user.name if user else "Невідомо"),
+            total_sum
+        )
 
         PRICE = LabeledPrice(
             label=f"Оплата замовлення #{order.id}", amount=int(total_sum) * 100
@@ -224,26 +233,37 @@ async def get_phone(message: Message, state: FSMContext):
 
     # ✅ Отримуємо всі дані
     data = await state.get_data()
+    if "total_sum" not in data:
+        cart = await Cart.objects.filter(user__telegram_id=message.from_user.id, is_active=True).alast()
+        if cart:
+            total_sum = float(cart.total_sum)
+            await state.update_data(total_sum=total_sum)
+        else:
+            await message.answer("🚫 Помилка: ваша корзина порожня або не знайдена.")
+            await state.clear()
+            return
+
     name, address, payment = (
         data["name"],
         data["address"],
-        data["payment"],
+        data["payment"]
     )
 
     # ✅ Створюємо або отримуємо користувача
-    user = await BotUser.objects.filter(telegram_id=message.from_user.id).afirst()
-    if not user:
-        await message.answer(
-            "Вибачте, виникла помилка при оформленні замовлення. Спробуйте ще раз."
-        )
+    user, created = await sync_to_async(BotUser.objects.get_or_create)(
+        telegram_id=message.from_user.id,
+        defaults={"name": name, "address": address}
+    )
 
     await DeliveryData.objects.acreate(
         user=user, name=name, address=address, phone_number=phone
     )
 
+    total_sum = data.get("total_sum", 0)
+
     # ✅ Створюємо замовлення
     order = await OrderHistory.objects.acreate(
-        user=user, total_sum=0, status="pending", payment_method=payment
+        user=user, total_sum=total_sum, status="pending", payment_method=payment
     )
 
     # ✅ Відповідь користувачу
@@ -253,9 +273,22 @@ async def get_phone(message: Message, state: FSMContext):
         f"*Адреса:* {address}\n"
         f"*Оплата:* {payment}\n"
         f"*Телефон:* {phone}\n"
-        f"*Номер замовлення:* {order.id}",
+        f"*Номер замовлення:* {order.id}\n"
+        f"*Сума замовлення:* {total_sum}",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode="Markdown",
+    )
+    print(f"🧪 DEBUG: order.user = {order.user.id if order.user else 'None'}")
+    print(f"🧪 DEBUG: order.total_sum = {order.total_sum}")
+
+    # десь після створення замовлення:
+    await send_new_order_notification(
+        bot,
+        order.id,
+        order.user.first_name if order.user and order.user.first_name else (
+            order.user.name if order.user and hasattr(order.user, "name") else "Невідомо"
+        ),
+        order.total_sum
     )
 
     cart = await Cart.objects.filter(user__telegram_id=message.from_user.id).alast()

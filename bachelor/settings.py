@@ -73,6 +73,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'bachelor.wsgi.application'
 
+TELEGRAM_ADMIN_CHAT_ID = -4668002196
+ADMIN_ORDER_URL = "https://your-site.com/admin/bot/orderhistory/{order_id}/change/"
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases

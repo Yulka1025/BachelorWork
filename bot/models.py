@@ -183,4 +183,15 @@ class OrderHistory(models.Model):
         verbose_name_plural = "Історія замовлень"
 
     def __str__(self):
-        return f"Замовлення #{self.id} (Користувач: {self.user.first_name}, Сума: {self.total_sum} грн)"
+        try:
+            user_name = getattr(self.user, 'first_name', None)
+            if not user_name or not isinstance(user_name, str):
+                user_name = "Невідомо"
+
+            total = self.total_sum if self.total_sum is not None else "?"
+
+            return f"Замовлення #{self.id} (Користувач: {user_name}, Сума: {total} грн)"
+        except Exception as e:
+            return f"Замовлення #{self.id} (некоректні дані)"
+
+

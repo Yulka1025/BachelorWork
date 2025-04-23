@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import pytz
 
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
@@ -10,17 +11,24 @@ from aiogram.types import (
     CallbackQuery,
 )
 from asgiref.sync import sync_to_async
+from aiogram.types import Message
+from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
+import asyncio
+from datetime import datetime
 
+from bachelor import settings
 from bot.checkout import router  # ✅ Імпортуємо router
 from .menu import *
 from .models import *
+from .bot_instance import *
 
-API_TOKEN = "7330837211:AAEyUOJjqdrBWDUq5MvMw-cZxUil1Cz8hpk"
+kyiv_tz = pytz.timezone('Europe/Kyiv')
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-bot = Bot(token=API_TOKEN)
 
 dp = Dispatcher()
 
@@ -35,15 +43,31 @@ keyboard_main = ReplyKeyboardMarkup(
     resize_keyboard=True,
 )
 
+working_hours = {
+    "Monday": ("09:00", "18:00"),
+    "Tuesday": ("09:00", "18:00"),
+    "Wednesday": ("12:09", "18:59"),
+    "Thursday": ("09:00", "18:00"),
+    "Friday": ("09:00", "18:00"),
+    "Saturday": ("10:00", "16:00"),
+    "Sunday": None  # вихідний
+}
+
 
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
-    photo_path = "/Users/tareekov/Desktop/BachelorWork/media/drinks/sticker_1.jpg"
-    photo = FSInputFile(photo_path)  # Використання FSInputFile для локального файлу
+    if not is_open_now():
+        await message.answer(get_off_hours_message())
+        return
+
+    # Якщо час робочий — показуємо меню і додаємо користувача
+    photo_path = "D:/Bachelor/static/image/menu.jpg"  # зверни увагу на шлях
+    photo = FSInputFile(photo_path)
+
     await message.answer_photo(
         photo=photo,
         caption="Привіт! Радий бачити тебе в одній з "
-        "найкращих піцерій Луцька. Гайда в меню та роби замовлення!",
+                "найкращих піцерій Луцька. Гайда в меню та роби замовлення!",
         reply_markup=keyboard_main,
     )
 
@@ -53,6 +77,48 @@ async def cmd_start(message: Message):
         first_name=message.from_user.first_name,
         last_name=message.from_user.last_name,
     )
+
+
+def is_open_now() -> bool:
+    now = datetime.now(kyiv_tz)
+    current_day = now.strftime("%A")
+    current_time = now.strftime("%H:%M")
+
+    hours = working_hours.get(current_day)
+    if not hours:
+        return False
+
+    start, end = hours
+    return start <= current_time <= end
+
+
+def get_off_hours_message() -> str:
+    days_ua = {
+        "Monday": "Понеділок",
+        "Tuesday": "Вівторок",
+        "Wednesday": "Середа",
+        "Thursday": "Четвер",
+        "Friday": "П'ятниця",
+        "Saturday": "Субота",
+        "Sunday": "Неділя"
+    }
+
+    schedule_lines = []
+    for eng_day, hours in working_hours.items():
+        day = days_ua[eng_day]
+        if hours:
+            schedule_lines.append(f"{day}: {hours[0]}–{hours[1]}")
+        else:
+            schedule_lines.append(f"{day}: вихідний")
+
+    schedule_text = "\n".join(schedule_lines)
+
+    return (
+        "⚠️ Заклад зараз зачинений.\n"
+        "🕘 Графік роботи:\n"
+        f"{schedule_text}\n\n"
+    )
+
 
 
 menu_list = InlineKeyboardMarkup(
@@ -66,7 +132,7 @@ menu_list = InlineKeyboardMarkup(
 
 @dp.message(lambda message: message.text == "Меню🍽")
 async def menu_all(message: Message):
-    photo_path = "/Users/tareekov/Desktop/BachelorWork/media/drinks/sticker_1.jpg"
+    photo_path = "D:\Bachelor\static\image\menu.jpg"
     photo = FSInputFile(photo_path)
     await message.answer_photo(
         photo=photo,
@@ -557,7 +623,7 @@ async def reset_quantity(callback: CallbackQuery, state):
         for row in keyboard:
             for button in row:
                 if button.callback_data.startswith(
-                    f"add_to_cart_{item_type}_{item_id}"
+                        f"add_to_cart_{item_type}_{item_id}"
                 ):
                     button.text = f"✅ Додати 1 шт. - {item_price} грн"
                     break
