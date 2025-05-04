@@ -1,9 +1,11 @@
+import requests
 from django.contrib import admin
 from django.utils.safestring import mark_safe
 from unfold.admin import ModelAdmin, StackedInline
 from unfold.decorators import display
-
+from asgiref.sync import async_to_sync
 from .models import *
+from .bot_instance import API_TOKEN
 
 
 class OrderHistoryGroupsInline(StackedInline):
@@ -56,6 +58,24 @@ class OrderHistoryAdmin(ModelAdmin):
     list_display = ("user", "total_sum", "display_status", "payment_method")
     list_filter = ("status", "payment_method")
     search_fields = ("user__username", "total_sum", "status", "payment_method")
+    list_editable = ("payment_method",)
+
+    # send telegram notification whem status changed
+    def send_sync_notification(self, user_id, message):
+        url = f"https://api.telegram.org/bot{API_TOKEN}/sendMessage"
+
+        payload = {"chat_id": user_id, "text": message, "parse_mode": "HTML"}
+
+        requests.post(url, data=payload)
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if change:
+            # check if status changed
+            if obj.status != form.initial["status"]:
+                # send notification to user
+                message = f"Статус вашого замовлення <b>{obj.id}</b> змінено: <b>{obj.get_status_display()}</b>"
+                self.send_sync_notification(obj.user.telegram_id, message)
 
     @display(
         description="Status",
